@@ -199,7 +199,21 @@ form.inline{display:grid;gap:8px;margin-top:12px;padding-top:12px;border-top:1px
 .linkbtn{background:none;border:0;color:var(--verde);font-weight:700;text-decoration:underline;cursor:pointer;padding:2px;font-size:13.5px}
 .login .nota{margin:0;color:var(--ink-2)}
 .login h2{font-size:15px}
+.board{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:1200px){.board{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:980px){.board{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.board{grid-template-columns:1fr}}
+.orden{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:6px;flex-wrap:wrap}
+.orden.p-Alta{border-left-color:var(--alta)} .orden.p-Media{border-left-color:var(--lima-2)} .orden.p-Baja{border-left-color:var(--baja)}
+.orden.primero{border-width:2px 2px 2px 6px;border-color:var(--verde)}
+.orden .pos{flex:0 0 auto;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--verde);color:var(--lima);font-weight:800;font-size:17px}
+.orden .l{display:flex;flex-direction:column;gap:4px;flex:1 1 280px;min-width:0}
+.orden .l strong{font-size:15px}
+.orden .acc{display:flex;gap:6px;flex:0 0 auto;align-items:center}
+.orden .acc .btn{min-width:36px}
+.aviso-guardar{position:sticky;top:8px;z-index:5;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--lima);color:var(--verde);font-weight:700;border-radius:8px;padding:10px 12px;margin-bottom:12px}
 </style>
+
 <style>
 #who{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--lima)}
 #who .btn{background:transparent;color:var(--blanco);border-color:rgba(255,255,255,.45)}
@@ -220,11 +234,14 @@ body.ocupado::after{content:"";position:fixed;top:0;left:0;height:4px;width:100%
 <div class="toast" id="toast" hidden></div>
 <script>
 /* SIGUNARA · Seguimiento de trámites — pantalla (corre en el navegador, habla con api() del servidor) */
-const ESTADOS = ["Sin iniciar","En curso","Judicializado","Finalizado","Respuesta negativa","Cancelado por nosotros"];
+const ESPERA = "Presentado, esperando respuesta oficial";
+const ESTADOS = ["Sin iniciar","En curso",ESPERA,"Judicializado","Finalizado","Respuesta negativa","Cancelado por nosotros"];
+const ACTIVOS = ["En curso",ESPERA,"Judicializado"];
 const CERRADOS = ["Finalizado","Respuesta negativa","Cancelado por nosotros"];
 const COLS = [
   {t:"Sin iniciar", m:s=>s==="Sin iniciar"},
   {t:"En curso", m:s=>s==="En curso"||!s},
+  {t:"Esperando respuesta oficial", m:s=>s===ESPERA},
   {t:"Judicializado", m:s=>s==="Judicializado"},
   {t:"Cerrados", m:s=>CERRADOS.includes(s)}
 ];
@@ -248,6 +265,7 @@ const esc = s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":
 const pd = s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
 const fmt = s=>s?pd(s).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";
 const opts=(arr,sel)=>arr.map(v=>`<option value="${esc(v)}"${v===sel?" selected":""}>${esc(v)}</option>`).join("");
+const rangoPrio = c=>{const i=PRIOS.indexOf(c.prio);return i<0?PRIOS.length:i}; // sin prioridad va al final
 const prioChip = p=>p?`<span class="chip ${esc(p)}">${esc(p)}</span>`:"";
 function estadoChip(s){const c=s==="Respuesta negativa"?"neg":["Finalizado","Resuelto"].includes(s)?"okc":"st";return `<span class="chip ${c}">${esc(s||"Sin estado")}</span>`}
 function toast(m,err){const e=$("#toast");e.textContent=m;e.style.background=err?"var(--alta)":"";e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,err?6000:3500)}
@@ -262,7 +280,7 @@ function habiles(desde){
   return n;
 }
 function ultimo(t){return [t.fecha,t.ultimo,...(t.hist||[]).map(h=>h.fecha)].filter(Boolean).sort().pop()||""}
-function stale(t){return ["En curso","Judicializado"].includes(t.estado)&&habiles(ultimo(t))>=D.diasAlerta}
+function stale(t){return ACTIVOS.includes(t.estado)&&habiles(ultimo(t))>=D.diasAlerta}
 const flat=ds=>ds.flatMap(d=>[d,...flat(d.hijos||[])]);
 
 /* ---------- comunicación con el servidor ---------- */
@@ -379,7 +397,8 @@ function renderTabs(){
   const recAb=D.reclamos.filter(r=>!["Resuelto","Cerrado sin solución"].includes(r.estado)).length;
   const recAfil=D.reclamos.filter(r=>r.hist.length&&r.hist.at(-1).afil).length;
   const tabs=[["tablero","Tablero",""],["pedidos","Pedidos por mail",sinResp?`<span class="count hot">${sinResp}</span>`:""],
-    ["reclamos","Reclamos de afiliados",`<span class="count${recAfil?" hot":""}">${recAb}</span>`],["pendientes","Pendientes",`<span class="count">${pend}</span>`]];
+    ["reclamos","Reclamos de afiliados",`<span class="count${recAfil?" hot":""}">${recAb}</span>`],["pendientes","Pendientes",`<span class="count">${pend}</span>`],
+    ["prioridad","Prioridad abogados",`<span class="count">${casosAbogados().length}</span>`]];
   if(esAdmin())tabs.push(["admin","Administración",esCD()&&(D.solicitudes||[]).length?`<span class="count hot">${D.solicitudes.length}</span>`:""]);
   if(state.view==="admin"&&!esAdmin())state.view="tablero";
   $("#tabs").innerHTML=tabs.map(([k,t,c])=>`<button data-view="${k}" aria-current="${state.view===k}">${t}${c}</button>`).join("");
@@ -387,7 +406,7 @@ function renderTabs(){
 function render(){
   if(!D){vLogin();return}
   renderTabs();
-  ({tablero:vTablero,pedidos:vPedidos,reclamos:vReclamos,pendientes:vPendientes,admin:vAdmin,afiliado:vAfiliado})[state.view]();
+  ({tablero:vTablero,pedidos:vPedidos,reclamos:vReclamos,pendientes:vPendientes,prioridad:vPrioridad,admin:vAdmin,afiliado:vAfiliado})[state.view]();
 }
 
 /* ---------- tablero ---------- */
@@ -396,7 +415,7 @@ function vTablero(){
   const list=D.tramites.filter(t=>(!f.inst||t.inst===f.inst)&&(!f.prio||t.prio===f.prio)&&(!f.resp||listaResp(t.resp).includes(f.resp))&&
     (!q||(t.ref+" "+t.exp+" "+t.id+" "+t.docs.map(d=>d.gde+" "+d.desc).join(" ")).toLowerCase().includes(q)));
   const nStale=D.tramites.filter(stale).length;
-  const nAlta=D.tramites.filter(t=>t.prio==="Alta"&&["En curso","Judicializado"].includes(t.estado)).length;
+  const nAlta=D.tramites.filter(t=>t.prio==="Alta"&&ACTIVOS.includes(t.estado)).length;
   const nSin=D.pedidos.filter(p=>!p.respondido&&p.estado!=="Pasado a reclamo").length;
   const nFalta=D.tramites.reduce((a,t)=>a+flat(t.docs).filter(d=>!d.archivo).length,0);
   $("#main").innerHTML=`
@@ -423,7 +442,7 @@ function vTablero(){
   <div class="alerts">
     <button class="alert crit" data-view="pedidos"><span class="n">${nSin}</span><span>Pedidos por mail<small>sin responder</small></span></button>
     <button class="alert warn" data-act="verStale"><span class="n">${nStale}</span><span>Sin movimiento<small>hace ${D.diasAlerta}+ días hábiles</small></span></button>
-    <button class="alert info" data-act="verAlta"><span class="n">${nAlta}</span><span>Prioridad alta<small>en curso o judicializados</small></span></button>
+    <button class="alert info" data-act="verAlta"><span class="n">${nAlta}</span><span>Prioridad alta<small>trámites activos</small></span></button>
     <button class="alert" data-act="verFalta"><span class="n">${nFalta}</span><span>Documentos sin PDF<small>falta subir el archivo</small></span></button>
   </div>
   <div class="filters">
@@ -432,11 +451,11 @@ function vTablero(){
     <select id="fResp" aria-label="Responsable"><option value="">Todos los responsables</option>${opts(D.responsables||[],f.resp)}</select>
     <input id="fQ" type="search" placeholder="Buscar por tema, ID o número GDE…" value="${esc(f.q)}">
   </div>
-  <div class="board">${COLS.map(c=>{const it=list.filter(t=>c.m(t.estado)).sort((a,b)=>PRIOS.indexOf(a.prio||"z")-PRIOS.indexOf(b.prio||"z"));
+  <div class="board">${COLS.map(c=>{const it=list.filter(t=>c.m(t.estado)).sort((a,b)=>rangoPrio(a)-rangoPrio(b));
     return `<div class="col"><header><h2>${c.t}</h2><span class="count">${it.length}</span></header>${it.map(card).join("")||'<div class="empty">Nada por aquí.</div>'}</div>`}).join("")}</div>`;
 }
 function card(t){
-  const dh=habiles(ultimo(t)),closed=!["En curso","Judicializado"].includes(t.estado);
+  const dh=habiles(ultimo(t)),closed=!ACTIVOS.includes(t.estado);
   return `<button class="card p-${esc(t.prio||"none")}" data-open="${esc(t.id)}">
     <span class="meta"><span class="chip inst">${esc(t.inst)}</span>${prioChip(t.prio)}${CERRADOS.includes(t.estado)?estadoChip(t.estado):""}${t.tipo!=="Expediente"?`<span class="chip st">${esc(t.tipo)}</span>`:""}${t.revisar?'<span class="chip stale">Revisar</span>':""}</span>
     <span class="ref">${esc(t.ref)}</span>
@@ -527,7 +546,7 @@ function vPedidos(){
 function vReclamos(){
   const f=state.fr,abiertos=r=>!["Resuelto","Cerrado sin solución"].includes(r.estado);
   const rs=D.reclamos.filter(r=>f.estado==="todos"||(f.estado==="abiertos"?abiertos(r):!abiertos(r)))
-    .sort((a,b)=>((b.hist.at(-1)||{}).afil?1:0)-((a.hist.at(-1)||{}).afil?1:0)||PRIOS.indexOf(a.prio||"z")-PRIOS.indexOf(b.prio||"z"));
+    .sort((a,b)=>((b.hist.at(-1)||{}).afil?1:0)-((a.hist.at(-1)||{}).afil?1:0)||rangoPrio(a)-rangoPrio(b));
   $("#main").innerHTML=`<div class="head"><div><h1>Reclamos de afiliados</h1><p class="lede">Casos individuales o grupales. Entran desde un pedido por mail ("Convertir en reclamo") o los inicia la Comisión Directiva, un delegado o un abogado.</p></div>
     <button class="btn primary" data-act="toggleRec">+ Nuevo reclamo</button></div>
   <form class="box" id="fRec" style="margin-bottom:18px" ${state.showRec?"":"hidden"}><h2>Nuevo reclamo</h2>
@@ -593,6 +612,48 @@ function vPendientes(){
     <div class="field" style="margin-top:8px">Responsables (opcional)${respPicker("pResp","")}</div><div style="margin-top:8px"><button class="btn primary" type="submit">Agregar a la bandeja</button></div></form>
   ${grupos.map(g=>`<div class="group"><h2>${esc(g)}</h2>${ps.filter(p=>(p.grupo||"Otros")===g).map(p=>`<div class="pend"><div class="l"><strong>${esc(p.ref)}</strong><span class="meta" style="display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink-2)"><span class="chip inst">${esc(p.inst)}</span>${prioChip(p.prio)||'<span class="chip st">Prioridad sin definir</span>'}<span>${esc(p.resp||"Sin responsable")}</span></span></div>
     <div style="display:flex;gap:6px"><button class="btn sm" data-open="${esc(p.id)}">Ver</button><button class="btn sm primary" data-conv="${esc(p.id)}">Convertir en trámite</button></div></div>`).join("")}</div>`).join("")||'<p class="lede">No hay pendientes.</p>'}`;
+}
+
+/* ---------- prioridad de los abogados ---------- */
+/* La Comisión Directiva ordena los casos abiertos que tienen algún abogado/a como responsable; los abogados ven su lista en ese orden. */
+const CERRADOS_TODOS=[...CERRADOS,"Resuelto","Cerrado sin solución"];
+function casosAbogados(){
+  const abg=D.abogados||[], orden=state.orden||D.ordenAbogados||[];
+  const pos=id=>{const i=orden.indexOf(id);return i<0?1e6:i};
+  return [...D.tramites,...D.reclamos].filter(c=>!CERRADOS_TODOS.includes(c.estado)&&listaResp(c.resp).some(n=>abg.includes(n)))
+    .sort((a,b)=>pos(a.id)-pos(b.id)||rangoPrio(a)-rangoPrio(b)||(a.fecha||"").localeCompare(b.fecha||""));
+}
+function abogadoElegido(){
+  if(state.fa===undefined)state.fa=rol()==="ABG"&&(D.abogados||[]).includes(D.usuario.nombre)?D.usuario.nombre:"";
+  return state.fa;
+}
+function vPrioridad(){
+  const todos=casosAbogados(), fa=abogadoElegido(), orden=state.orden||D.ordenAbogados||[];
+  const lista=fa?todos.filter(c=>listaResp(c.resp).includes(fa)):todos;
+  const puede=esCD();
+  $("#main").innerHTML=`<div class="head"><div><h1>Prioridad de los abogados</h1><p class="lede">${puede
+      ?"Trámites y reclamos abiertos que tienen un abogado/a como responsable. Ordenalos con las flechas: el 1 es lo primero que hay que resolver. Después tocá «Guardar orden»."
+      :"El orden lo fija la Comisión Directiva: el 1 es lo primero que hay que resolver."}</p></div></div>
+  ${puede&&state.orden?`<div class="aviso-guardar"><span>Cambiaste el orden y todavía no lo guardaste.</span><span style="display:flex;gap:6px"><button class="btn sm primary" data-act="guardarOrden">Guardar orden</button><button class="btn sm" data-act="descartarOrden">Descartar</button></span></div>`:""}
+  <div class="filters"><select id="fAbg" aria-label="Abogado/a"><option value="">Todos los abogados/as</option>${opts(D.abogados||[],fa)}</select></div>
+  ${(D.abogados||[]).length?"":`<p class="lede">Todavía no hay usuarios con el rol Abogado/a. Se cargan en Administración.</p>`}
+  ${lista.map((c,i)=>{const isR=c.kind==="reclamo",nuevo=!orden.includes(c.id);return `<div class="orden p-${esc(c.prio||"none")}${i===0?" primero":""}">
+    <span class="pos" aria-label="Prioridad ${i+1}">${i+1}</span>
+    <div class="l"><strong>${esc(isR?c.titulo:c.ref)}</strong>
+      <span class="meta" style="display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);align-items:center">${isR?'<span class="chip inst">Reclamo de afiliado</span>':`<span class="chip inst">${esc(c.inst)}</span>`}${prioChip(c.prio)}<span class="chip st">${esc(c.estado||"Sin estado")}</span>${nuevo?'<span class="chip stale">Sin ordenar todavía</span>':""}${!isR&&stale(c)?`<span class="chip stale">${habiles(ultimo(c))} días hábiles sin movimiento</span>`:""}</span>
+      <span style="font-size:12.5px;color:var(--ink-2)">${esc(c.id)}${c.exp?` · <span class="gde">${esc(c.exp)}</span>`:""} · ${esc(listaResp(c.resp).join(", "))}</span></div>
+    <span class="acc">${puede?`<button class="btn sm" data-ord="primero" data-id="${esc(c.id)}" title="Pasar al primer lugar" aria-label="Pasar al primer lugar" ${i===0?"disabled":""}>⤒</button><button class="btn sm" data-ord="subir" data-id="${esc(c.id)}" title="Subir" aria-label="Subir" ${i===0?"disabled":""}>↑</button><button class="btn sm" data-ord="bajar" data-id="${esc(c.id)}" title="Bajar" aria-label="Bajar" ${i===lista.length-1?"disabled":""}>↓</button>`:""}<button class="btn sm" data-open="${esc(c.id)}">Abrir</button></span>
+  </div>`}).join("")||`<p class="lede">${fa?esc(fa)+" no tiene casos abiertos asignados.":"No hay casos abiertos asignados a abogados/as."}</p>`}`;
+}
+/* Mueve un caso dentro de la lista visible (si hay filtro por abogado, salta a los casos de ese abogado). */
+function moverOrden(id,como){
+  const todos=casosAbogados().map(c=>c.id), fa=abogadoElegido();
+  const vis=fa?casosAbogados().filter(c=>listaResp(c.resp).includes(fa)).map(c=>c.id):todos;
+  const i=vis.indexOf(id); if(i<0)return;
+  const destino=como==="primero"?vis[0]:como==="subir"?vis[i-1]:vis[i+1]; if(!destino||destino===id)return;
+  const sin=todos.filter(x=>x!==id), j=sin.indexOf(destino);
+  sin.splice(como==="bajar"?j+1:j,0,id);
+  state.orden=sin; render();
 }
 
 /* ---------- administración ---------- */
@@ -662,7 +723,8 @@ async function bajar(action,data){
 
 /* ---------- eventos ---------- */
 document.addEventListener("click",e=>{
-  const b=e.target.closest("[data-view],[data-open],[data-act],[data-dl],[data-dlall],[data-conv],[data-quitar],[data-torec],[data-login],[data-sol],[data-reset],[data-temporal]"); if(!b||state.busy)return;
+  const b=e.target.closest("[data-view],[data-open],[data-act],[data-dl],[data-dlall],[data-conv],[data-quitar],[data-torec],[data-login],[data-sol],[data-reset],[data-temporal],[data-ord]"); if(!b||state.busy)return;
+  if(b.dataset.ord){moverOrden(b.dataset.id,b.dataset.ord);return}
   if(b.dataset.login){state.loginPaso=b.dataset.login;const mi=$("#lMail");if(mi&&mi.value)state.loginMail=mi.value.trim();render();return}
   if(b.dataset.sol){const mail=b.dataset.mail,ap=b.dataset.sol==="aprobar";
     if(!ap&&!confirm("¿Rechazar la solicitud de "+mail+"?"))return;
@@ -682,7 +744,7 @@ document.addEventListener("click",e=>{
   if(b.dataset.quitar){accion("guardarLista",{lista:b.dataset.quitar,mail:b.dataset.mail,quitar:true},"Correo quitado de la lista.").catch(()=>{});return}
   const a=b.dataset.act;
   if(a==="close")closeFicha();
-  if(a==="salir"){sesion(null);D=null;abierto=null;$("#overlay").innerHTML="";state.loginPaso="inicio";render()}
+  if(a==="salir"){sesion(null);D=null;abierto=null;state.fa=undefined;state.orden=null;$("#overlay").innerHTML="";state.loginPaso="inicio";render()}
   if(a==="nuevo"){state.showTram=!state.showTram;render();if(state.showTram)$("#tRef").focus()}
   if(a==="toggleRec"){state.showRec=!state.showRec;render();if(state.showRec)$("#rNom").focus()}
   if(a==="editExp"){state.editExp=true;renderFicha();$("#eExp").focus()}
@@ -692,6 +754,8 @@ document.addEventListener("click",e=>{
   if(a==="guardarResp"){const val=leerPicker("eResp");state.editResp=false;accion("editar",{id:abierto,campo:"resp",valor:val},"Responsables guardados.").catch(()=>{})}
   if(a==="verStale"){const n=D.tramites.filter(stale).length;toast(n?n+" trámite(s) tienen el aviso naranja en su tarjeta.":"No hay trámites demorados.")}
   if(a==="verAlta"){state.f.prio="Alta";render()}
+  if(a==="guardarOrden"){const ids=casosAbogados().map(c=>c.id);accion("guardarOrdenAbogados",{ids},"Orden guardado. Los abogados ya lo ven así.").then(()=>{state.orden=null;render()}).catch(()=>{})}
+  if(a==="descartarOrden"){state.orden=null;render()}
   if(a==="verFalta")toast("Abrí las tarjetas: los documentos sin archivo dicen \"Falta subir el PDF\".");
 });
 document.addEventListener("change",e=>{
@@ -701,6 +765,7 @@ document.addEventListener("change",e=>{
   if(el.id==="fPrio"){state.f.prio=el.value;render()}
   if(el.id==="fResp"){state.f.resp=el.value;render()}
   if(el.id==="fRecEst"){state.fr.estado=el.value;render()}
+  if(el.id==="fAbg"){state.fa=el.value;render()}
   if(el.id==="tTieneExp"){$("#tExpWrap").hidden=!el.checked;if(el.checked)$("#tExp").focus()}
   if(el.id==="dGenExp"){$("#dExpWrap").hidden=!el.checked;if(el.checked)$("#dExp").focus()}
   if(abierto&&el.dataset.campo){accion("editar",{id:abierto,campo:el.dataset.campo,valor:el.value},"Cambio guardado en el historial.").catch(()=>renderFicha())}
