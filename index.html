@@ -538,7 +538,7 @@ function vPedidos(){
     <div class="gde">Asunto: ${esc(p.asunto)}</div>
     <div class="summary" style="margin:0"><span class="chip ia">Resumen hecho por IA</span><p>${esc(p.resumen)}</p></div>
     <div class="checks"><label><input type="checkbox" data-pchk="respondido" data-id="${esc(p.id)}" ${p.respondido?"checked":""}> Ya se respondió</label><label><input type="checkbox" data-pchk="acomp" data-id="${esc(p.id)}" ${p.acomp?"checked":""}> Se dio acompañamiento</label></div>
-    <div class="row" style="align-items:center"><span style="color:var(--ink-2);font-size:12.5px">Responsable: <b style="color:var(--ink)">${esc(p.resp||"Sin asignar")}</b></span><span style="display:flex;gap:6px;flex:0 0 auto">${p.reclamoId?`<button class="btn sm" data-open="${esc(p.reclamoId)}">Ver reclamo</button>`:`<button class="btn sm primary" data-torec="${esc(p.id)}">Convertir en reclamo</button>`}<button class="btn sm" data-open="${esc(p.id)}">Abrir ficha</button></span></div>
+    <div class="row" style="align-items:center"><span style="color:var(--ink-2);font-size:12.5px">Responsable: <b style="color:var(--ink)">${esc(p.resp||"Sin asignar")}</b></span><span style="display:flex;gap:6px;flex:0 0 auto">${p.reclamoId?`<button class="btn sm" data-open="${esc(p.reclamoId)}">Ver reclamo</button>`:`<button class="btn sm primary" data-torec="${esc(p.id)}">Convertir en reclamo</button>`}<button class="btn sm" data-open="${esc(p.id)}">Abrir ficha</button>${esAdmin()&&!p.reclamoId?`<button class="btn sm" data-borrarped="${esc(p.id)}" title="Para mails que entraron por una palabra clave pero no son pedidos de apoyo" style="color:var(--alta)">Borrar</button>`:""}</span></div>
   </article>`).join("")||'<p class="lede">Todavía no llegó ningún pedido. Cuando llegue un mail con esas palabras en el asunto, aparece acá.</p>'}</div>`;
 }
 
@@ -723,7 +723,10 @@ async function bajar(action,data){
 
 /* ---------- eventos ---------- */
 document.addEventListener("click",e=>{
-  const b=e.target.closest("[data-view],[data-open],[data-act],[data-dl],[data-dlall],[data-conv],[data-quitar],[data-torec],[data-login],[data-sol],[data-reset],[data-temporal],[data-ord]"); if(!b||state.busy)return;
+  const b=e.target.closest("[data-view],[data-open],[data-act],[data-dl],[data-dlall],[data-conv],[data-quitar],[data-torec],[data-login],[data-sol],[data-reset],[data-temporal],[data-ord],[data-borrarped]"); if(!b||state.busy)return;
+  if(b.dataset.borrarped){const p=D.pedidos.find(x=>x.id===b.dataset.borrarped);
+    if(!confirm(`¿Borrar el pedido de ${p.nombre}?\n\nAsunto: ${p.asunto}\n\nSe borra de la plataforma junto con sus novedades y adjuntos (los adjuntos van a la papelera de Drive). El mail sigue en Gmail y no se vuelve a cargar. No se puede deshacer desde la plataforma.`))return;
+    accion("borrarPedido",{id:p.id},"Pedido borrado.").catch(()=>{});return}
   if(b.dataset.ord){moverOrden(b.dataset.id,b.dataset.ord);return}
   if(b.dataset.login){state.loginPaso=b.dataset.login;const mi=$("#lMail");if(mi&&mi.value)state.loginMail=mi.value.trim();render();return}
   if(b.dataset.sol){const mail=b.dataset.mail,ap=b.dataset.sol==="aprobar";
