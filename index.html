@@ -212,6 +212,16 @@ form.inline{display:grid;gap:8px;margin-top:12px;padding-top:12px;border-top:1px
 .orden .acc{display:flex;gap:6px;flex:0 0 auto;align-items:center}
 .orden .acc .btn{min-width:36px}
 .aviso-guardar{position:sticky;top:8px;z-index:5;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--lima);color:var(--verde);font-weight:700;border-radius:8px;padding:10px 12px;margin-bottom:12px}
+.chip.espera{background:#E3ECF7;color:#1F4E79;font-weight:700}
+.selbox{display:inline-flex;align-items:center;cursor:pointer;padding:2px}
+.selbox input{width:18px;height:18px;accent-color:var(--verde);cursor:pointer}
+.grupo-cab{display:flex;gap:8px;align-items:center;margin:0 0 8px}
+h2.grupo-cab{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--verde);border-bottom:3px solid var(--lima);padding-bottom:6px}
+h3.grupo-cab{font-size:13px;color:var(--ink);margin-top:6px}
+h4.grupo-cab{font-size:12.5px;color:var(--ink-2);font-weight:700}
+.subgrupo{margin:6px 0 10px 14px;padding-left:10px;border-left:3px solid var(--line)}
+.req .who{align-items:center;gap:8px}
+details.group>summary{cursor:pointer;font-weight:700;color:var(--ink-2)}
 </style>
 
 <style>
@@ -248,14 +258,18 @@ const COLS = [
 const PRIOS = ["Alta","Media","Baja"];
 const ESTADOS_R = ["Nuevo","En análisis","En gestión","Derivado a abogados","Resuelto","Cerrado sin solución"];
 const ESTADOS_P = ["Nuevo","En análisis","En acompañamiento","Derivado a abogados","Pasado a reclamo","Resuelto"];
-const TEMAS = ["Traslado","Sumario / disciplinario","Licencias","Salario / adicionales","Condiciones de trabajo","Vivienda","Otro"];
+const TEMAS = ["Ascenso escalafonario (COPIC)","Adicional por título","Traslado","Sumario / disciplinario","Licencias","Salario / adicionales","Condiciones de trabajo","Vivienda","Otro"];
+const temas = ()=>(D&&D.temas&&D.temas.length?D.temas:TEMAS); // se configuran en Administración
+const agrupamientos = ()=>(D&&D.agrupamientos)||["Guardaparque Técnico","Guardaparque de Conservación Territorial"];
+const AGR_CORTO = {"Guardaparque Técnico":"GT","Guardaparque de Conservación Territorial":"GCT"};
+function dlPromos(){const ps=[...new Set((D.reclamos||[]).map(r=>r.promo).filter(Boolean))].sort();return `<datalist id="dlPromo">${ps.map(p=>`<option value="${esc(p)}">`).join("")}</datalist>`}
 const TIPOS_DOC = ["Nota de origen","Sub-nota","Agregación","Subsanación","Ampliatoria / Aclaratoria","Informe","Respuesta del organismo","Adjunto"];
 const TIPOS_NOV = ["Avance","Llamada","Mail","Reunión","Informe","Resultado","Nota interna"];
 const ROLES = ["Comisión Directiva","Abogado/a","Delegado/a"];
 const ROL_CORTO = {"Comisión Directiva":"CD","Abogado/a":"ABG","Delegado/a":"DEL","Afiliado/a":"AFI"};
 const MAX_MB = 20;
 
-const state = { view:"tablero", f:{inst:"",prio:"",resp:"",q:""}, fr:{estado:"abiertos"}, showTram:false, showRec:false, editExp:false, busy:false, loginPaso:"inicio", loginMail:"", loginMsg:"" };
+const state = { view:"tablero", f:{inst:"",prio:"",resp:"",q:""}, fr:{estado:"abiertos"}, showTram:false, showRec:false, editExp:false, busy:false, loginPaso:"inicio", loginMail:"", loginMsg:"", sel:new Set(), ftema:"", agrupar:true, grupo:null };
 let D = null;          // datos que manda el servidor
 let abierto = null;    // id del caso abierto en la ficha
 
@@ -356,7 +370,7 @@ function vLogin(){
   $("#tabs").innerHTML=""; $("#who").innerHTML="";
   const logo=$(".brand img").src, p=state.loginPaso, m=esc(state.loginMail);
   let cuerpo;
-  if(p==="recuperar") cuerpo=`<h2>Primera vez / Olvidé mi contraseña</h2><p class="nota">Para correos ya habilitados: te mandamos un código para crear tu contraseña. ¿Todavía no tenés acceso? Usá <b>«Solicitar acceso»</b>.</p>
+  if(p==="recuperar") cuerpo=`<h2>Primera vez / Olvidé mi contraseña</h2><p class="nota">Para correos ya habilitados: te mandamos un código para crear tu contraseña. <b>Si sos afiliado/a</b> con un reclamo, te llega directamente tu link personal para entrar sin contraseña. ¿Todavía no tenés acceso? Usá <b>«Solicitar acceso»</b>.</p>
     <form id="fRecup" class="apilado">${campo("lMail","email","tu correo",`value="${m}" autocomplete="email"`)}<button class="btn primary">Enviarme el código</button></form>`;
   else if(p==="nueva") cuerpo=`<h2>Creá tu contraseña</h2><p class="nota">Si <b>${m}</b> tiene acceso, te llegó un código de 6 números. Revisá también spam.</p>
     <form id="fNueva" class="apilado">${campo("lCodigo","text","Código de 6 números",'inputmode="numeric" maxlength="6" autocomplete="one-time-code"')}
@@ -372,6 +386,7 @@ function vLogin(){
     <form id="fLogin" class="apilado">${campo("lMail","email","tu correo",`value="${m}" autocomplete="username"`)}${campo("lClave","password","tu contraseña",'autocomplete="current-password"')}
     ${verClave}<button class="btn primary">Entrar</button></form>
     <button class="linkbtn" data-login="recuperar">Primera vez / Olvidé mi contraseña</button>
+    <button class="linkbtn" data-login="recuperar">Soy afiliado/a: quiero mi link para entrar</button>
     <button class="linkbtn" data-login="solicitar">Solicitar acceso</button>`;
   $("#main").innerHTML=`<div class="login"><div class="card"><img src="${logo}" alt="Isologo de SIGUNARA"><h1>Seguimiento de trámites</h1>${cuerpo}
     ${p==="recuperar"?`<button class="linkbtn" data-login="solicitar">Solicitar acceso</button>`:""}
@@ -457,7 +472,7 @@ function vTablero(){
 function card(t){
   const dh=habiles(ultimo(t)),closed=!ACTIVOS.includes(t.estado);
   return `<button class="card p-${esc(t.prio||"none")}" data-open="${esc(t.id)}">
-    <span class="meta"><span class="chip inst">${esc(t.inst)}</span>${prioChip(t.prio)}${CERRADOS.includes(t.estado)?estadoChip(t.estado):""}${t.tipo!=="Expediente"?`<span class="chip st">${esc(t.tipo)}</span>`:""}${t.revisar?'<span class="chip stale">Revisar</span>':""}</span>
+    <span class="meta"><span class="chip inst">${esc(t.inst)}</span>${prioChip(t.prio)}${CERRADOS.includes(t.estado)?estadoChip(t.estado):""}${t.tipo!=="Expediente"?`<span class="chip st">${esc(t.tipo)}</span>`:""}${chipPresentado(t)}${t.revisar?'<span class="chip stale">Revisar</span>':""}</span>
     <span class="ref">${esc(t.ref)}</span>
     ${t.exp?`<span class="gde">${esc(t.exp)}</span>`:t.tipo==="Expediente"?`<span class="meta"><span class="chip noexp">Sin n.º de expediente</span></span>`:""}
     <span class="meta"><span>${esc(t.id)} · ${esc(listaResp(t.resp).join(", ")||"Sin responsable")}</span>${!closed?(stale(t)?`<span class="chip stale">${dh} días hábiles sin movimiento</span>`:`<span>· últ. mov. ${fmt(ultimo(t))}</span>`):""}${t.docs.length?`<span>· ${flat(t.docs).length} doc.</span>`:""}</span>
@@ -484,7 +499,9 @@ function renderFicha(){
     ${t.revisar?`<p style="margin:10px 0 0;background:var(--warn-soft);color:var(--warn);padding:8px 10px;font-size:13px"><b>Revisar (migración):</b> ${esc(t.revisar)}<br><span style="font-size:12px">Cuando lo corrijas, borrá esta nota en la planilla.</span></p>`:""}
     <section><header><h2>Datos</h2></header>
       <div class="kv">
-        ${isR?`<div><small>Afiliado/a</small>${esc(t.nombre)}</div><div><small>Correo</small><span style="user-select:all">${esc(t.mail||"—")}</span></div><div><small>Teléfono</small>${esc(t.tel||"—")}</div><div><small>Lugar de trabajo</small>${campoLugar(`data-campo="lugar" value="${esc(t.lugar||"")}" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:5px 7px"`)}</div><div><small>Iniciado</small>${fmt(t.fecha)}</div><div><small>Tema</small><select data-campo="tema">${opts(TEMAS,t.tema)}</select></div>`
+        ${isR?`<div><small>Afiliado/a</small>${esc(t.nombre)}</div><div><small>Correo</small><span style="user-select:all">${esc(t.mail||"—")}</span></div><div><small>Teléfono</small>${esc(t.tel||"—")}</div><div><small>Lugar de trabajo</small>${campoLugar(`data-campo="lugar" value="${esc(t.lugar||"")}" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:5px 7px"`)}</div><div><small>Iniciado</small>${fmt(t.fecha)}</div><div><small>Tema</small><select data-campo="tema">${opts([...new Set([...temas(),t.tema].filter(Boolean))],t.tema)}</select></div>
+               <div><small>Agrupamiento</small><select data-campo="agrup"><option value="">Sin definir</option>${opts(agrupamientos(),t.agrup)}</select></div>
+               <div><small>Promoción (camada)</small><input data-campo="promo" list="dlPromo" value="${esc(t.promo||"")}" placeholder="Ej.: 2015" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:5px 7px">${dlPromos()}</div>`
              :isP?`<div><small>Correo</small><span style="user-select:all">${esc(t.mail)}</span></div><div><small>Teléfono</small>${esc(t.tel||"—")}</div><div><small>Lugar de trabajo</small>${campoLugar(`data-campo="lugar" value="${esc(t.lugar||"")}" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:5px 7px"`)}</div><div><small>Recibido</small>${fmt(t.fecha)}</div>`
              :`<div><small>Fecha de inicio</small>${fmt(t.fecha)}</div><div><small>Lugar actual</small>${esc(t.lugar||"—")}</div><div><small>Último movimiento</small>${fmt(ultimo(t))} <span style="color:var(--ink-2)">(${habiles(ultimo(t))} días háb.)</span></div>`}
         <div><small>Estado</small><select data-campo="estado">${opts(isR?ESTADOS_R:isP?ESTADOS_P:ESTADOS,t.estado)}</select></div>
@@ -496,7 +513,8 @@ function renderFicha(){
       ${isP?`<div class="summary"><span class="chip ia">Resumen hecho por IA</span><p>${esc(t.resumen)}</p></div>
         <div class="checks" style="margin-top:12px"><label><input type="checkbox" data-chk="respondido" ${t.respondido?"checked":""}> Ya se respondió${t.fResp?` (${fmt(t.fResp)})`:""}</label><label><input type="checkbox" data-chk="acomp" ${t.acomp?"checked":""}> Se dio acompañamiento</label></div>
         <p style="margin:12px 0 0">${t.reclamoId?`<button class="btn sm" data-open="${esc(t.reclamoId)}">Ver el reclamo ${esc(t.reclamoId)} →</button>`:`<button class="btn sm primary" data-torec="${esc(t.id)}">Convertir en reclamo</button>`}</p>`:""}
-      ${isR?`<div class="access"><input type="checkbox" id="chkAcceso" data-chk="acceso" ${t.acceso?"checked":""}><div><label for="chkAcceso"><b>Darle acceso al afiliado para seguir este reclamo</b></label><br><span style="color:var(--ink-2);font-size:12.5px">${t.mail?`Entra con la cuenta de Google de ${esc(t.mail)} (o con un código por mail). Solo ve este reclamo y lo marcado como visible. Al activarlo le llega un mail con el link.`:"Primero hay que cargar el correo del afiliado en la planilla."}</span></div></div>`:""}
+      ${isR?`<div class="access"><input type="checkbox" id="chkAcceso" data-chk="acceso" ${t.acceso?"checked":""}><div><label for="chkAcceso"><b>Darle acceso al afiliado para seguir este reclamo</b></label><br><span style="color:var(--ink-2);font-size:12.5px">${t.mail?`Al activarlo le llega a ${esc(t.mail)} un mail con su <b>link personal y permanente</b>: entra directo, sin usuario ni contraseña. Solo ve este reclamo y lo marcado como visible, y puede subir sus antecedentes. Si le quitás el acceso, el link deja de funcionar.`:"Primero hay que cargar el correo del afiliado en la planilla."}</span>
+        ${t.enlace?`<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn sm" data-copiar="${esc(t.enlace)}">Copiar su link personal</button><span style="font-size:12px;color:var(--ink-2);align-self:center">para mandárselo por WhatsApp si no le llegó el mail</span></div>`:""}</div></div>`:""}
       ${!isP&&!isR&&stale(t)?`<p style="margin:12px 0 0;color:var(--warn);font-weight:600">⚠ Lleva ${habiles(ultimo(t))} días hábiles sin movimiento.</p>`:""}
     </section>
     <section><header><h2>Documentos (${allDocs.length})</h2>${allDocs.some(d=>d.archivo)?`<button class="btn sm" data-dlall="${esc(t.id)}">Descargar todos (.zip)</button>`:""}</header>
@@ -528,26 +546,77 @@ function renderFicha(){
   </aside>`;
 }
 
+/* ---------- selección de varios casos (pedidos o reclamos) ---------- */
+function chk(id){return `<label class="selbox" title="Seleccionar"><input type="checkbox" data-sel="${esc(id)}"${state.sel.has(id)?" checked":""} aria-label="Seleccionar ${esc(id)}"></label>`}
+function barraSeleccion(esRec){
+  const n=state.sel.size; if(!n)return "";
+  const soloRec=[...state.sel].every(id=>D.reclamos.some(r=>r.id===id));
+  return `<div class="aviso-guardar"><span>${n} seleccionado(s)</span><span style="display:flex;gap:6px;flex-wrap:wrap">
+    <button class="btn sm primary" data-act="responderGrupo">Responder a los ${n}</button>
+    ${esRec&&soloRec?`<button class="btn sm" data-act="exportCsv">Descargar planilla</button><button class="btn sm" data-act="exportZip">Descargar documentos (ZIP)</button>`:""}
+    <button class="btn sm" data-act="limpiarSel">Quitar selección</button></span></div>`;
+}
+/* Encabezado de grupo con casilla para seleccionar a todos los del grupo. */
+function cabGrupo(tag,titulo,ids,extra=""){
+  const todos=ids.length&&ids.every(id=>state.sel.has(id));
+  return `<${tag} class="grupo-cab"><label class="selbox"><input type="checkbox" data-selgrupo="${esc(ids.join(","))}"${todos?" checked":""} aria-label="Seleccionar todos: ${esc(titulo)}"></label><span>${esc(titulo)}</span><span class="count">${ids.length}</span>${extra}</${tag}>`;
+}
+function porClave(lista,fn){const m=new Map();lista.forEach(x=>{const k=fn(x);if(!m.has(k))m.set(k,[]);m.get(k).push(x)});return m}
+const ordenTemas=k=>{const i=temas().indexOf(k);return i<0?99:i};
+
 /* ---------- pedidos ---------- */
-function vPedidos(){
-  const ps=[...D.pedidos].sort((a,b)=>(a.respondido-b.respondido)||(b.fecha||"").localeCompare(a.fecha||""));
-  $("#main").innerHTML=`<div class="head"><div><h1>Pedidos por mail</h1><p class="lede">Se cargan solos desde sigunara@gmail.com cuando el asunto habla de apoyo, ayuda, asesoramiento o acompañamiento sindical.</p></div></div>
-  <div class="list">${ps.map(p=>`<article class="req ${p.respondido||p.reclamoId?"":"nuevo"}">
-    <div class="who"><strong>${esc(p.nombre)}</strong><span class="meta" style="display:flex;gap:6px;flex-wrap:wrap">${p.respondido||p.reclamoId?"":'<span class="chip neg">Sin responder</span>'}${prioChip(p.prio)}${estadoChip(p.estado)}</span></div>
+function tarjetaPedido(p){
+  return `<article class="req ${p.respondido||p.reclamoId?"":"nuevo"}">
+    <div class="who">${p.reclamoId?"":chk(p.id)}<strong style="flex:1">${esc(p.nombre)}</strong><span class="meta" style="display:flex;gap:6px;flex-wrap:wrap">${p.respondido||p.reclamoId?"":'<span class="chip neg">Sin responder</span>'}${prioChip(p.prio)}${estadoChip(p.estado)}</span></div>
     <div class="contact"><span>${esc(p.mail)}</span>${p.tel?`<span>${esc(p.tel)}</span>`:""}${p.lugar?`<em style="font-style:normal">${esc(p.lugar)}</em>`:""}<em style="font-style:normal">Recibido ${fmt(p.fecha)}</em></div>
     <div class="gde">Asunto: ${esc(p.asunto)}</div>
-    <div class="summary" style="margin:0"><span class="chip ia">Resumen hecho por IA</span><p>${esc(p.resumen)}</p></div>
+    <div class="summary" style="margin:0"><span class="chip ia">Resumen hecho por IA</span>${p.agrup?` <span class="chip st">${esc(p.agrup)}</span>`:""}<p>${esc(p.resumen)}</p></div>
     <div class="checks"><label><input type="checkbox" data-pchk="respondido" data-id="${esc(p.id)}" ${p.respondido?"checked":""}> Ya se respondió</label><label><input type="checkbox" data-pchk="acomp" data-id="${esc(p.id)}" ${p.acomp?"checked":""}> Se dio acompañamiento</label></div>
-    <div class="row" style="align-items:center"><span style="color:var(--ink-2);font-size:12.5px">Responsable: <b style="color:var(--ink)">${esc(p.resp||"Sin asignar")}</b></span><span style="display:flex;gap:6px;flex:0 0 auto">${p.reclamoId?`<button class="btn sm" data-open="${esc(p.reclamoId)}">Ver reclamo</button>`:`<button class="btn sm primary" data-torec="${esc(p.id)}">Convertir en reclamo</button>`}<button class="btn sm" data-open="${esc(p.id)}">Abrir ficha</button>${esAdmin()&&!p.reclamoId?`<button class="btn sm" data-borrarped="${esc(p.id)}" title="Para mails que entraron por una palabra clave pero no son pedidos de apoyo" style="color:var(--alta)">Borrar</button>`:""}</span></div>
-  </article>`).join("")||'<p class="lede">Todavía no llegó ningún pedido. Cuando llegue un mail con esas palabras en el asunto, aparece acá.</p>'}</div>`;
+    <div class="row" style="align-items:center"><span style="color:var(--ink-2);font-size:12.5px">Responsable: <b style="color:var(--ink)">${esc(p.resp||"Sin asignar")}</b></span><span style="display:flex;gap:6px;flex:0 0 auto;flex-wrap:wrap">${p.reclamoId?`<button class="btn sm" data-open="${esc(p.reclamoId)}">Ver reclamo</button>`:`<button class="btn sm primary" data-torec="${esc(p.id)}">Convertir en reclamo</button>`}<button class="btn sm" data-open="${esc(p.id)}">Abrir ficha</button>${esAdmin()&&!p.reclamoId?`<button class="btn sm" data-borrarped="${esc(p.id)}" title="Para mails que entraron por una palabra clave pero no son pedidos de apoyo" style="color:var(--alta)">Borrar</button>`:""}</span></div>
+  </article>`;
+}
+function vPedidos(){
+  const ps=[...D.pedidos].filter(p=>!state.ftema||(p.tema||"Sin tema")===state.ftema)
+    .sort((a,b)=>(a.respondido-b.respondido)||(b.fecha||"").localeCompare(a.fecha||""));
+  const pendientes=ps.filter(p=>!p.reclamoId), pasados=ps.filter(p=>p.reclamoId);
+  const grupos=[...porClave(pendientes,p=>p.tema||"Sin tema")].sort((a,b)=>ordenTemas(a[0])-ordenTemas(b[0]));
+  const temasUsados=[...new Set(D.pedidos.map(p=>p.tema||"Sin tema"))];
+  $("#main").innerHTML=`<div class="head"><div><h1>Pedidos por mail</h1><p class="lede">Se cargan solos desde sigunara@gmail.com y la IA sugiere el tema. Marcá varios del mismo tema y tocá «Responder»: a cada uno le llega su propio mail con el modelo de nota y el link a su reclamo.</p></div></div>
+  ${barraSeleccion(false)}
+  <div class="filters"><select id="fPedTema" aria-label="Tema"><option value="">Todos los temas</option>${opts(temasUsados,state.ftema)}</select></div>
+  ${grupos.map(([t,lista])=>`<section class="group">${cabGrupo("h2",t,lista.map(p=>p.id))}<div class="list">${lista.map(tarjetaPedido).join("")}</div></section>`).join("")}
+  ${pasados.length?`<details class="group"><summary>Ya pasados a reclamo (${pasados.length})</summary><div class="list" style="margin-top:10px">${pasados.map(tarjetaPedido).join("")}</div></details>`:""}
+  ${ps.length?"":'<p class="lede">Todavía no llegó ningún pedido. Cuando llegue un mail con esas palabras en el asunto, aparece acá.</p>'}`;
 }
 
 /* ---------- reclamos ---------- */
+function tarjetaReclamo(r){
+  const u=r.hist.at(-1);
+  return `<article class="req ${u&&u.afil?"nuevo":""}">
+    <div class="who">${chk(r.id)}<strong style="flex:1">${esc(r.titulo)}</strong><span class="meta" style="display:flex;gap:6px;flex-wrap:wrap">${prioChip(r.prio)}${estadoChip(r.estado)}</span></div>
+    <div class="contact"><b style="color:var(--ink)">${esc(r.nombre)}</b>${r.lugar?`<em style="font-style:normal">${esc(r.lugar)}</em>`:""}<em style="font-style:normal">Iniciado ${fmt(r.fecha)}</em></div>
+    <div class="meta" style="display:flex;gap:6px;flex-wrap:wrap;font-size:12px"><span class="chip st">${esc(r.tema)}</span>${r.agrup?`<span class="chip inst">${esc(AGR_CORTO[r.agrup]||r.agrup)}</span>`:""}${r.promo?`<span class="chip inst">Promoción ${esc(r.promo)}</span>`:""}<span class="chip st">Origen: ${esc(r.origen)}</span>${r.acceso?'<span class="chip vis">El afiliado sigue su reclamo</span>':""}</div>
+    ${u?`<div style="font-size:13px;${u.afil?"background:var(--accent-soft);padding:8px 10px":""}"><span style="color:var(--ink-2);font-size:12px">${u.afil?"<b style='color:var(--verde)'>NOVEDAD DEL AFILIADO</b> · ":"Última novedad · "}${fmt(u.fecha)}</span><br>${esc(u.texto)}</div>`:""}
+    <div class="row" style="align-items:center"><span style="color:var(--ink-2);font-size:12.5px">Responsable: <b style="color:var(--ink)">${esc(r.resp||"Sin asignar")}</b></span><button class="btn sm" data-open="${esc(r.id)}" style="flex:0 0 auto">Abrir ficha</button></div>
+  </article>`;
+}
 function vReclamos(){
   const f=state.fr,abiertos=r=>!["Resuelto","Cerrado sin solución"].includes(r.estado);
-  const rs=D.reclamos.filter(r=>f.estado==="todos"||(f.estado==="abiertos"?abiertos(r):!abiertos(r)))
+  const rs=D.reclamos.filter(r=>(f.estado==="todos"||(f.estado==="abiertos"?abiertos(r):!abiertos(r)))&&(!state.ftemaR||r.tema===state.ftemaR))
     .sort((a,b)=>((b.hist.at(-1)||{}).afil?1:0)-((a.hist.at(-1)||{}).afil?1:0)||rangoPrio(a)-rangoPrio(b));
-  $("#main").innerHTML=`<div class="head"><div><h1>Reclamos de afiliados</h1><p class="lede">Casos individuales o grupales. Entran desde un pedido por mail ("Convertir en reclamo") o los inicia la Comisión Directiva, un delegado o un abogado.</p></div>
+  let cuerpo;
+  if(state.agrupar){
+    const porTema=[...porClave(rs,r=>r.tema||"Otro")].sort((a,b)=>ordenTemas(a[0])-ordenTemas(b[0]));
+    cuerpo=porTema.map(([t,lt])=>{
+      const conSub=lt.some(r=>r.agrup||r.promo);
+      const sub=!conSub?`<div class="list">${lt.map(tarjetaReclamo).join("")}</div>`
+        :[...porClave(lt,r=>r.agrup||"Agrupamiento sin definir")].sort((a,b)=>a[0].localeCompare(b[0])).map(([ag,la])=>
+          `<div class="subgrupo">${cabGrupo("h3",ag,la.map(r=>r.id))}${[...porClave(la,r=>r.promo?"Promoción "+r.promo:"Promoción sin definir")].sort((a,b)=>a[0].localeCompare(b[0],"es",{numeric:true})).map(([pr,lp])=>
+            `<div class="subgrupo">${cabGrupo("h4",pr,lp.map(r=>r.id))}<div class="list">${lp.map(tarjetaReclamo).join("")}</div></div>`).join("")}</div>`).join("");
+      return `<section class="group">${cabGrupo("h2",t,lt.map(r=>r.id))}${sub}</section>`;
+    }).join("");
+  }else cuerpo=`<div class="list">${rs.map(tarjetaReclamo).join("")}</div>`;
+  $("#main").innerHTML=`<div class="head"><div><h1>Reclamos de afiliados</h1><p class="lede">Agrupados por tema, y dentro de cada tema por agrupamiento y promoción. Marcá un grupo entero (o algunos) para responderles a todos juntos o descargar la planilla y los documentos para un reclamo colectivo.</p></div>
     <button class="btn primary" data-act="toggleRec">+ Nuevo reclamo</button></div>
   <form class="box" id="fRec" style="margin-bottom:18px" ${state.showRec?"":"hidden"}><h2>Nuevo reclamo</h2>
     <div class="row" style="margin-top:10px">
@@ -558,20 +627,47 @@ function vReclamos(){
     </div>
     <div class="row" style="margin-top:8px">
       <label class="field" style="flex:3 1 260px">¿Cuál es el reclamo?<input id="rTit" required placeholder="Ej.: No le pagan el suplemento por título"></label>
-      <label class="field">Tema<select id="rTema">${opts(TEMAS)}</select></label>
+      <label class="field">Tema<select id="rTema">${opts(temas())}</select></label>
       <label class="field">Prioridad<select id="rPrio"><option value="">Sin definir</option>${opts(PRIOS)}</select></label>
     </div>
     <div class="field" style="margin-top:8px">Responsables del seguimiento (podés marcar varios)${respPicker("rResp","")}</div>
     <label class="field" style="margin-top:8px">Detalle<textarea id="rDet" placeholder="Qué pasó, desde cuándo, qué pide el afiliado"></textarea></label>
     <div style="margin-top:8px"><button class="btn primary" type="submit">Crear reclamo</button></div></form>
-  <div class="filters"><select id="fRecEst" aria-label="Estado">${[["abiertos","Abiertos"],["cerrados","Resueltos o cerrados"],["todos","Todos"]].map(([v,t])=>`<option value="${v}"${f.estado===v?" selected":""}>${t}</option>`).join("")}</select></div>
-  <div class="list">${rs.map(r=>{const u=r.hist.at(-1);return `<article class="req ${u&&u.afil?"nuevo":""}">
-    <div class="who"><strong>${esc(r.titulo)}</strong><span class="meta" style="display:flex;gap:6px;flex-wrap:wrap">${prioChip(r.prio)}${estadoChip(r.estado)}</span></div>
-    <div class="contact"><b style="color:var(--ink)">${esc(r.nombre)}</b>${r.lugar?`<em style="font-style:normal">${esc(r.lugar)}</em>`:""}<em style="font-style:normal">Iniciado ${fmt(r.fecha)}</em></div>
-    <div class="meta" style="display:flex;gap:6px;flex-wrap:wrap;font-size:12px"><span class="chip st">${esc(r.tema)}</span><span class="chip st">Origen: ${esc(r.origen)}</span>${r.acceso?'<span class="chip vis">El afiliado sigue su reclamo</span>':""}</div>
-    ${u?`<div style="font-size:13px;${u.afil?"background:var(--accent-soft);padding:8px 10px":""}"><span style="color:var(--ink-2);font-size:12px">${u.afil?"<b style='color:var(--verde)'>NOVEDAD DEL AFILIADO</b> · ":"Última novedad · "}${fmt(u.fecha)}</span><br>${esc(u.texto)}</div>`:""}
-    <div class="row" style="align-items:center"><span style="color:var(--ink-2);font-size:12.5px">Responsable: <b style="color:var(--ink)">${esc(r.resp||"Sin asignar")}</b></span><button class="btn sm" data-open="${esc(r.id)}" style="flex:0 0 auto">Abrir ficha</button></div>
-  </article>`}).join("")||"<p class='lede'>No hay reclamos en esta vista.</p>"}</div>`;
+  ${barraSeleccion(true)}
+  <div class="filters"><select id="fRecEst" aria-label="Estado">${[["abiertos","Abiertos"],["cerrados","Resueltos o cerrados"],["todos","Todos"]].map(([v,t])=>`<option value="${v}"${f.estado===v?" selected":""}>${t}</option>`).join("")}</select>
+    <select id="fRecTema" aria-label="Tema"><option value="">Todos los temas</option>${opts([...new Set(D.reclamos.map(r=>r.tema).filter(Boolean))],state.ftemaR)}</select>
+    <label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="fAgrupar"${state.agrupar?" checked":""}> Agrupar por tema</label></div>
+  ${rs.length?cuerpo:"<p class='lede'>No hay reclamos en esta vista.</p>"}`;
+}
+
+/* ---------- responder a varios ---------- */
+function abrirGrupo(){
+  const ids=[...state.sel], casos=ids.map(find).filter(Boolean);
+  const tems=[...new Set(casos.map(c=>c.tema).filter(Boolean))];
+  const sinMail=casos.filter(c=>!c.mail).map(c=>c.nombre);
+  $("#overlay").innerHTML=`<div class="scrim" data-act="cerrarGrupo"></div>
+  <aside class="panel" role="dialog" aria-modal="true" aria-label="Responder a varios">
+    <button class="close" data-act="cerrarGrupo">Cerrar ✕</button>
+    <h1>Responder a ${casos.length} afiliado(s)</h1>
+    <p class="lede">A cada uno le llega <b>su propio mail, por separado</b> (nadie ve a los demás), dentro de la conversación de Gmail del pedido que mandó. Lleva tu mensaje, el modelo de nota y el botón a su reclamo. Los pedidos se pasan a reclamo solos.</p>
+    <div class="resp-list" style="margin:8px 0">${casos.map(c=>`<span>${esc(c.nombre)}</span>`).join("")}</div>
+    ${sinMail.length?`<p style="color:var(--warn);font-weight:600">Sin correo cargado (no les llega mail): ${esc(sinMail.join(", "))}</p>`:""}
+    ${D.cupoMail!==undefined&&D.cupoMail<casos.length?`<p style="color:var(--alta);font-weight:700">Hoy Google deja mandar ${D.cupoMail} mail(s) más.</p>`:""}
+    <form id="fGrupo" class="apilado" style="margin-top:10px">
+      <div class="row">
+        <label class="field">Tema<select id="gTema">${opts(temas(),tems.length===1?tems[0]:"")}</select></label>
+        <label class="field">Agrupamiento<select id="gAgr"><option value="">No cambiar</option>${opts(agrupamientos())}</select></label>
+        <label class="field">Promoción<input id="gPromo" list="dlPromo" placeholder="No cambiar">${dlPromos()}</label>
+        <label class="field">Pasar a estado<select id="gEst"><option value="">No cambiar</option>${opts(ESTADOS_R)}</select></label>
+      </div>
+      <label class="field">Asunto (si no hay conversación previa)<input id="gAsunto" value="Respuesta de SIGUNARA a tu pedido"></label>
+      <label class="field">Mensaje (el mismo para todos; empieza con «Hola, nombre:»)<textarea id="gTxt" required rows="7" placeholder="Ej.: Te enviamos el modelo de nota para reclamar la falta de respuesta de la COPIC. Completá tus datos, firmala y presentala por GDE. Cuando tengas el número, subilo a tu reclamo con el botón de abajo."></textarea></label>
+      <label class="field">Modelo de nota (opcional: PDF o Word, hasta ${MAX_MB} MB)<input id="gFile" type="file"></label>
+      <label class="field">Descripción del modelo<input id="gDesc" placeholder="Ej.: Modelo de nota - reclamo por falta de COPIC"></label>
+      <div class="checks"><label><input type="checkbox" id="gAcceso" checked> Darles acceso para que sigan su reclamo y suban sus antecedentes (link personal y permanente)</label></div>
+      <div><button class="btn primary" type="submit">Enviar a ${casos.length} afiliado(s)</button></div>
+    </form>
+  </aside>`;
 }
 
 /* ---------- vista del afiliado ---------- */
@@ -591,9 +687,11 @@ function vAfiliado(){
     <h2 style="margin-top:16px">Novedades</h2>
     <ul class="timeline" style="margin-top:10px">${novsDe(r.id).reverse().map(h=>`<li class="${h.afil?"afil":""}"><div class="when"><b>${fmt(h.fecha)}</b> · ${h.afil?"Vos":esc(h.autor)}</div><p>${esc(h.texto)}</p></li>`).join("")||"<li>Todavía no hay novedades.</li>"}</ul>
     <form class="inline" data-afil="${esc(r.id)}">
-      <label class="field">Contanos una novedad<textarea required placeholder="Ej.: Me llamaron de RRHH para una reunión el lunes."></textarea></label>
-      <label class="field">Adjuntar archivo (opcional, hasta ${MAX_MB} MB)<input type="file"></label>
-      <div><button class="btn primary" type="submit">Enviar novedad</button></div>
+      <h2 style="margin:0">Subí tus antecedentes o contanos una novedad</h2>
+      <p style="margin:0;font-size:13px;color:var(--ink-2)">Notas que presentaste antes, respuestas que te llegaron, número de expediente o cualquier novedad. Podés elegir varios archivos a la vez.</p>
+      <label class="field">Mensaje<textarea required placeholder="Ej.: Adjunto la nota que presenté en 2024 y la respuesta. Expediente EX-2024-..."></textarea></label>
+      <label class="field">Archivos (opcional, hasta ${MAX_MB} MB cada uno)<input type="file" multiple></label>
+      <div><button class="btn primary" type="submit">Enviar</button></div>
     </form></section>`}).join("")}`;
 }
 
@@ -623,32 +721,36 @@ function casosAbogados(){
   return [...D.tramites,...D.reclamos].filter(c=>!CERRADOS_TODOS.includes(c.estado)&&listaResp(c.resp).some(n=>abg.includes(n)))
     .sort((a,b)=>pos(a.id)-pos(b.id)||rangoPrio(a)-rangoPrio(b)||(a.fecha||"").localeCompare(b.fecha||""));
 }
-function abogadoElegido(){
-  if(state.fa===undefined)state.fa=rol()==="ABG"&&(D.abogados||[]).includes(D.usuario.nombre)?D.usuario.nombre:"";
-  return state.fa;
+function fechaPresentacion(c){
+  if(c.estado!==ESPERA)return "";
+  const h=[...(c.hist||[])].reverse().find(h=>h.tipo==="Cambio"&&/^Estado:/.test(h.texto||"")&&(h.texto||"").endsWith("→ "+ESPERA));
+  return h?h.fecha:(c.ultimo||c.fecha||"");
+}
+const diasDesde=iso=>iso?Math.max(0,Math.round((pd(D.hoy)-pd(iso))/864e5)):0;
+function chipPresentado(c){
+  const f=fechaPresentacion(c); if(!f)return "";
+  const d=diasDesde(f);
+  return `<span class="chip espera" title="Presentado el ${fmt(f)}">Con presentación a la espera de respuesta · ${d===0?"hoy":d===1?"hace 1 día":`hace ${d} días`}</span>`;
 }
 function vPrioridad(){
-  const todos=casosAbogados(), fa=abogadoElegido(), orden=state.orden||D.ordenAbogados||[];
-  const lista=fa?todos.filter(c=>listaResp(c.resp).includes(fa)):todos;
+  const lista=casosAbogados(), todos=lista, orden=state.orden||D.ordenAbogados||[];
   const puede=esCD();
   $("#main").innerHTML=`<div class="head"><div><h1>Prioridad de los abogados</h1><p class="lede">${puede
       ?"Trámites y reclamos abiertos que tienen un abogado/a como responsable. Ordenalos con las flechas: el 1 es lo primero que hay que resolver. Después tocá «Guardar orden»."
-      :"El orden lo fija la Comisión Directiva: el 1 es lo primero que hay que resolver."}</p></div></div>
+      :"El orden lo fija la Comisión Directiva: el 1 es lo primero que hay que resolver."} <b>${todos.length} tema(s) pendiente(s)</b>${(D.abogados||[]).length>1?": "+(D.abogados.map(a=>`${esc(a)} ${todos.filter(c=>listaResp(c.resp).includes(a)).length}`).join(" · ")):""}.</p></div></div>
   ${puede&&state.orden?`<div class="aviso-guardar"><span>Cambiaste el orden y todavía no lo guardaste.</span><span style="display:flex;gap:6px"><button class="btn sm primary" data-act="guardarOrden">Guardar orden</button><button class="btn sm" data-act="descartarOrden">Descartar</button></span></div>`:""}
-  <div class="filters"><select id="fAbg" aria-label="Abogado/a"><option value="">Todos los abogados/as</option>${opts(D.abogados||[],fa)}</select></div>
   ${(D.abogados||[]).length?"":`<p class="lede">Todavía no hay usuarios con el rol Abogado/a. Se cargan en Administración.</p>`}
   ${lista.map((c,i)=>{const isR=c.kind==="reclamo",nuevo=!orden.includes(c.id);return `<div class="orden p-${esc(c.prio||"none")}${i===0?" primero":""}">
     <span class="pos" aria-label="Prioridad ${i+1}">${i+1}</span>
     <div class="l"><strong>${esc(isR?c.titulo:c.ref)}</strong>
-      <span class="meta" style="display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);align-items:center">${isR?'<span class="chip inst">Reclamo de afiliado</span>':`<span class="chip inst">${esc(c.inst)}</span>`}${prioChip(c.prio)}<span class="chip st">${esc(c.estado||"Sin estado")}</span>${nuevo?'<span class="chip stale">Sin ordenar todavía</span>':""}${!isR&&stale(c)?`<span class="chip stale">${habiles(ultimo(c))} días hábiles sin movimiento</span>`:""}</span>
+      <span class="meta" style="display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);align-items:center">${isR?'<span class="chip inst">Reclamo de afiliado</span>':`<span class="chip inst">${esc(c.inst)}</span>`}${prioChip(c.prio)}${c.estado===ESPERA?chipPresentado(c):`<span class="chip st">${esc(c.estado||"Sin estado")}</span>`}${nuevo?'<span class="chip stale">Sin ordenar todavía</span>':""}${!isR&&stale(c)?`<span class="chip stale">${habiles(ultimo(c))} días hábiles sin movimiento</span>`:""}</span>
       <span style="font-size:12.5px;color:var(--ink-2)">${esc(c.id)}${c.exp?` · <span class="gde">${esc(c.exp)}</span>`:""} · ${esc(listaResp(c.resp).join(", "))}</span></div>
     <span class="acc">${puede?`<button class="btn sm" data-ord="primero" data-id="${esc(c.id)}" title="Pasar al primer lugar" aria-label="Pasar al primer lugar" ${i===0?"disabled":""}>⤒</button><button class="btn sm" data-ord="subir" data-id="${esc(c.id)}" title="Subir" aria-label="Subir" ${i===0?"disabled":""}>↑</button><button class="btn sm" data-ord="bajar" data-id="${esc(c.id)}" title="Bajar" aria-label="Bajar" ${i===lista.length-1?"disabled":""}>↓</button>`:""}<button class="btn sm" data-open="${esc(c.id)}">Abrir</button></span>
-  </div>`}).join("")||`<p class="lede">${fa?esc(fa)+" no tiene casos abiertos asignados.":"No hay casos abiertos asignados a abogados/as."}</p>`}`;
+  </div>`}).join("")||`<p class="lede">No hay casos abiertos asignados a abogados/as.</p>`}`;
 }
-/* Mueve un caso dentro de la lista visible (si hay filtro por abogado, salta a los casos de ese abogado). */
+/* Mueve un caso dentro de la lista. */
 function moverOrden(id,como){
-  const todos=casosAbogados().map(c=>c.id), fa=abogadoElegido();
-  const vis=fa?casosAbogados().filter(c=>listaResp(c.resp).includes(fa)).map(c=>c.id):todos;
+  const vis=casosAbogados().map(c=>c.id), todos=vis;
   const i=vis.indexOf(id); if(i<0)return;
   const destino=como==="primero"?vis[0]:como==="subir"?vis[i-1]:vis[i+1]; if(!destino||destino===id)return;
   const sin=todos.filter(x=>x!==id), j=sin.indexOf(destino);
@@ -682,6 +784,8 @@ function vAdmin(){
         <div><button class="btn primary">Dar acceso</button></div></form>
       <h2 style="margin-top:16px;font-size:12.5px">Afiliados/as con acceso</h2><p style="margin:4px 0 8px;font-size:13px;color:var(--ink-2)">Se habilitan desde la ficha de cada reclamo. Solo ven su propio reclamo.</p>
       <div class="tbl"><table><thead><tr><th>Afiliado/a</th><th>Correo</th><th>Reclamo</th></tr></thead><tbody>${recAcceso.map(r=>`<tr><td>${esc(r.nombre)}</td><td class="gde">${esc(r.mail)}</td><td><button class="btn sm" data-open="${esc(r.id)}">${esc(r.titulo)}</button></td></tr>`).join("")||'<tr><td colspan="3">Ninguno todavía.</td></tr>'}</tbody></table></div></div>
+    <div class="box"><h2>Temas de reclamo</h2><p>Sirven para agrupar los reclamos y los pedidos por mail (la IA elige uno de esta lista). Uno por renglón.</p>
+      <form id="fTemas" style="display:grid;gap:8px"><textarea id="tLista" rows="8" style="border:1px solid var(--line);border-radius:6px;padding:8px">${esc(temas().join(String.fromCharCode(10)))}</textarea><div><button class="btn primary">Guardar temas</button></div></form></div>
     <div class="box"><h2>Instituciones</h2><p>Cada institución es una pestaña de la planilla con la misma estructura.</p>
       <ul class="plain">${D.instituciones.map(i=>`<li><span>${esc(i)}</span><span class="count">${D.tramites.filter(t=>t.inst===i).length} trámites</span></li>`).join("")}</ul>
       <form id="fInstNew" class="row" style="margin-top:10px"><input id="iNom" required placeholder="Ej.: ARCA (ex AFIP)" style="border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:var(--surface)"><button class="btn primary" style="flex:0 0 auto">+ Nueva institución</button></form></div>
@@ -723,7 +827,8 @@ async function bajar(action,data){
 
 /* ---------- eventos ---------- */
 document.addEventListener("click",e=>{
-  const b=e.target.closest("[data-view],[data-open],[data-act],[data-dl],[data-dlall],[data-conv],[data-quitar],[data-torec],[data-login],[data-sol],[data-reset],[data-temporal],[data-ord],[data-borrarped]"); if(!b||state.busy)return;
+  const b=e.target.closest("[data-view],[data-open],[data-act],[data-dl],[data-dlall],[data-conv],[data-quitar],[data-torec],[data-login],[data-sol],[data-reset],[data-temporal],[data-ord],[data-borrarped],[data-copiar]"); if(!b||state.busy)return;
+  if(b.dataset.copiar){navigator.clipboard.writeText(b.dataset.copiar).then(()=>toast("Link copiado. Pegalo en WhatsApp o en un mail."),()=>prompt("Copiá el link:",b.dataset.copiar));return}
   if(b.dataset.borrarped){const p=D.pedidos.find(x=>x.id===b.dataset.borrarped);
     if(!confirm(`¿Borrar el pedido de ${p.nombre}?\n\nAsunto: ${p.asunto}\n\nSe borra de la plataforma junto con sus novedades y adjuntos (los adjuntos van a la papelera de Drive). El mail sigue en Gmail y no se vuelve a cargar. No se puede deshacer desde la plataforma.`))return;
     accion("borrarPedido",{id:p.id},"Pedido borrado.").catch(()=>{});return}
@@ -738,7 +843,7 @@ document.addEventListener("click",e=>{
     accion("claveTemporal",{mail}).then(r=>{if(r&&r.clave)alert("Clave temporal para "+mail+":\n\n"+r.clave+"\n\nPasásela por WhatsApp o teléfono. Entra con su correo y esta clave, y después puede cambiarla con «Primera vez / Olvidé mi contraseña».")}).catch(()=>{});return}
   if(b.dataset.reset){if(!confirm("¿Resetear la contraseña de "+b.dataset.reset+"? Le llega un mail para crear una nueva."))return;
     accion("resetearClave",{mail:b.dataset.reset},"Contraseña reseteada. Le mandamos un mail para crear una nueva.").catch(()=>{});return}
-  if(b.dataset.view){state.view=b.dataset.view;closeFicha();window.scrollTo(0,0);return}
+  if(b.dataset.view){state.view=b.dataset.view;state.sel.clear();closeFicha();window.scrollTo(0,0);return}
   if(b.dataset.open){openFicha(b.dataset.open);return}
   if(b.dataset.dl){bajar("descargar",{docId:b.dataset.dl});return}
   if(b.dataset.dlall){bajar("descargarTodo",{id:b.dataset.dlall});return}
@@ -747,7 +852,7 @@ document.addEventListener("click",e=>{
   if(b.dataset.quitar){accion("guardarLista",{lista:b.dataset.quitar,mail:b.dataset.mail,quitar:true},"Correo quitado de la lista.").catch(()=>{});return}
   const a=b.dataset.act;
   if(a==="close")closeFicha();
-  if(a==="salir"){sesion(null);D=null;abierto=null;state.fa=undefined;state.orden=null;$("#overlay").innerHTML="";state.loginPaso="inicio";render()}
+  if(a==="salir"){sesion(null);D=null;abierto=null;state.orden=null;$("#overlay").innerHTML="";state.loginPaso="inicio";render()}
   if(a==="nuevo"){state.showTram=!state.showTram;render();if(state.showTram)$("#tRef").focus()}
   if(a==="toggleRec"){state.showRec=!state.showRec;render();if(state.showRec)$("#rNom").focus()}
   if(a==="editExp"){state.editExp=true;renderFicha();$("#eExp").focus()}
@@ -759,6 +864,11 @@ document.addEventListener("click",e=>{
   if(a==="verAlta"){state.f.prio="Alta";render()}
   if(a==="guardarOrden"){const ids=casosAbogados().map(c=>c.id);accion("guardarOrdenAbogados",{ids},"Orden guardado. Los abogados ya lo ven así.").then(()=>{state.orden=null;render()}).catch(()=>{})}
   if(a==="descartarOrden"){state.orden=null;render()}
+  if(a==="limpiarSel"){state.sel.clear();render()}
+  if(a==="responderGrupo")abrirGrupo();
+  if(a==="cerrarGrupo"){$("#overlay").innerHTML=""}
+  if(a==="exportCsv"||a==="exportZip"){const ids=[...state.sel],t=[...new Set(ids.map(find).map(r=>r&&r.tema).filter(Boolean))];
+    bajar("exportarGrupo",{ids,formato:a==="exportZip"?"zip":"csv",nombre:(t.length===1?t[0]:"Reclamos")+" - "+D.hoy})}
   if(a==="verFalta")toast("Abrí las tarjetas: los documentos sin archivo dicen \"Falta subir el PDF\".");
 });
 document.addEventListener("change",e=>{
@@ -768,7 +878,11 @@ document.addEventListener("change",e=>{
   if(el.id==="fPrio"){state.f.prio=el.value;render()}
   if(el.id==="fResp"){state.f.resp=el.value;render()}
   if(el.id==="fRecEst"){state.fr.estado=el.value;render()}
-  if(el.id==="fAbg"){state.fa=el.value;render()}
+  if(el.id==="fRecTema"){state.ftemaR=el.value;render()}
+  if(el.id==="fPedTema"){state.ftema=el.value;render()}
+  if(el.id==="fAgrupar"){state.agrupar=el.checked;render()}
+  if(el.dataset.sel){el.checked?state.sel.add(el.dataset.sel):state.sel.delete(el.dataset.sel);render();return}
+  if(el.dataset.selgrupo){el.dataset.selgrupo.split(",").forEach(id=>el.checked?state.sel.add(id):state.sel.delete(id));render();return}
   if(el.id==="tTieneExp"){$("#tExpWrap").hidden=!el.checked;if(el.checked)$("#tExp").focus()}
   if(el.id==="dGenExp"){$("#dExpWrap").hidden=!el.checked;if(el.checked)$("#dExp").focus()}
   if(abierto&&el.dataset.campo){accion("editar",{id:abierto,campo:el.dataset.campo,valor:el.value},"Cambio guardado en el historial.").catch(()=>renderFicha())}
@@ -787,7 +901,7 @@ document.addEventListener("submit",async e=>{
   try{
     if(f.id==="fLogin"){state.loginMail=v("#lMail");await ingresar("ingresar",{email:state.loginMail,clave:$("#lClave").value})}
     if(f.id==="fRecup"){state.loginMail=v("#lMail");
-      try{const r=await llamar("pedirCodigo",{email:state.loginMail});state.loginPaso="nueva";render();toast(r.mensaje)}
+      try{const r=await llamar("pedirCodigo",{email:state.loginMail});if(r.enlace){state.loginMsg=r.mensaje;state.loginPaso="enviado";render();return}state.loginPaso="nueva";render();toast(r.mensaje)}
       catch(err){if(err.noAcceso){state.loginPaso="solicitar";render();toast(err.message,true);return}throw err}}
     if(f.id==="fNueva"){const c1=$("#lClave1").value,c2=$("#lClave2").value;
       if(c1.length<8)throw new Error("La contraseña tiene que tener al menos 8 caracteres.");
@@ -808,17 +922,45 @@ document.addEventListener("submit",async e=>{
     if(f.id==="fUsr"){await accion("guardarUsuario",{mail:v("#uMail"),nombre:v("#uNom"),rol:v("#uRol"),activo:true,avisar:$("#uAvisar").checked},"Usuario agregado.")}
     if(f.id==="fInstNew"){await accion("crearInstitucion",{nombre:v("#iNom")},"Institución creada, con su pestaña en la planilla.")}
     if(f.dataset.afil){
-      const txt=f.querySelector("textarea").value.trim(),file=f.querySelector("input[type=file]").files[0];
-      const arch=await leerArchivo(file);
-      if(arch)await accion("agregarDocumento",Object.assign({id:f.dataset.afil,desc:file.name},arch));
-      await accion("agregarNovedad",{id:f.dataset.afil,texto:txt},"Novedad enviada. Le avisamos a quien te acompaña.");
+      const id=f.dataset.afil,txt=f.querySelector("textarea").value.trim(),files=[...f.querySelector("input[type=file]").files];
+      for(const file of files){const arch=await leerArchivo(file);await accion("agregarDocumento",Object.assign({id,desc:file.name},arch))}
+      await accion("agregarNovedad",{id,texto:txt},files.length?`Enviado con ${files.length} archivo(s). Le avisamos a quien te acompaña.`:"Novedad enviada. Le avisamos a quien te acompaña.");
     }
+    if(f.id==="fGrupo"){
+      const ids=[...state.sel],arch=await leerArchivo($("#gFile").files[0]);
+      if(!confirm(`¿Mandar la respuesta a ${ids.length} afiliado(s)? A cada uno le llega su propio mail.`))return;
+      const r=await accion("responderGrupo",Object.assign({ids,tema:v("#gTema"),agrup:v("#gAgr"),promo:v("#gPromo"),estado:v("#gEst"),asunto:v("#gAsunto"),texto:$("#gTxt").value.trim(),
+        descModelo:v("#gDesc"),darAcceso:$("#gAcceso").checked},arch||{}));
+      const x=r.resultado;state.sel.clear();$("#overlay").innerHTML="";render();
+      alert(`Listo.
+
+Mail enviado a ${x.ok.length}: ${x.ok.join(", ")||"—"}`+(x.sinMail.length?`
+
+Sin correo (no se mandó): ${x.sinMail.join(", ")}`:"")+(x.fallos.length?`
+
+No se pudo mandar a: ${x.fallos.join(", ")}`:""));
+    }
+    if(f.id==="fTemas"){await accion("guardarTemas",{temas:$("#tLista").value.split(/\r?\n/)},"Temas guardados.")}
   }catch(err){if(err&&err.message)toast(err.message,true)}
 });
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&abierto)closeFicha()});
 
 /* ---------- arranque ---------- */
+/* Link personal del afiliado: ?acceso=… entra directo a su reclamo, sin usuario ni contraseña. */
+function enlaceEnUrl(){
+  return new Promise(ok=>{
+    if(window.google&&google.script&&google.script.url)google.script.url.getLocation(l=>ok((l.parameter||{}).acceso||""));
+    else ok(new URLSearchParams(location.search).get("acceso")||"");
+  });
+}
 (async function(){
+  const enlace=await enlaceEnUrl();
+  if(enlace){
+    $("#main").innerHTML='<p class="lede" style="padding:30px 0">Entrando a tu reclamo…</p>';
+    try{history.replaceState(null,"",location.pathname)}catch(e){}
+    try{const r=await llamar("entrarConEnlace",{enlace});sesion(r.token);D=r.datos;hidratar();state.view=rol()==="AFI"?"afiliado":"tablero";render();return}
+    catch(e){sesion(null);render();toast(e.message,true);return}
+  }
   if(!sesion()){render();return}
   $("#main").innerHTML='<p class="lede" style="padding:30px 0">Cargando…</p>';
   try{D=await llamar("cargar",{});hidratar();state.view=rol()==="AFI"?"afiliado":"tablero"}catch(e){D=null}
