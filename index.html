@@ -260,6 +260,7 @@ function aplicarEstados(){
   CERRADOS=[...CERRADOS_BASE,...ce];
   ACTIVOS=["En curso",ESPERA,"Judicializado",...ex.filter(e=>["En curso","Esperando respuesta","Judicializado"].includes(e.col)).map(e=>e.nombre)];
   CERRADOS_TODOS=[...CERRADOS,"Resuelto","Cerrado sin solución"];
+  ESTADOS_R=["Nuevo","En análisis","En gestión",...ab,"Derivado a abogados","Resuelto","Cerrado sin solución",...ce]; // también valen para reclamos
 }
 const COLS = [
   {t:"Sin iniciar", m:s=>colDe(s)==="Sin iniciar"},
@@ -269,7 +270,7 @@ const COLS = [
   {t:"Cerrados", m:s=>colDe(s)==="Cerrados"}
 ];
 const PRIOS = ["Alta","Media","Baja"];
-const ESTADOS_R = ["Nuevo","En análisis","En gestión","Derivado a abogados","Resuelto","Cerrado sin solución"];
+let ESTADOS_R = ["Nuevo","En análisis","En gestión","Derivado a abogados","Resuelto","Cerrado sin solución"];
 const ESTADOS_P = ["Nuevo","En análisis","En acompañamiento","Derivado a abogados","Pasado a reclamo","Resuelto"];
 const TEMAS = ["Ascenso escalafonario (COPIC)","Adicional por título","Traslado","Sumario / disciplinario","Licencias","Salario / adicionales","Condiciones de trabajo","Vivienda","Otro"];
 const temas = ()=>(D&&D.temas&&D.temas.length?D.temas:TEMAS); // se configuran en Administración
@@ -423,7 +424,7 @@ function renderTabs(){
   if(rol()==="AFI"){state.view="afiliado";$("#tabs").innerHTML=`<button aria-current="true">Mi reclamo</button>`;return}
   const sinResp=D.pedidos.filter(p=>!p.respondido&&p.estado!=="Pasado a reclamo").length;
   const pend=D.tramites.filter(t=>t.estado==="Sin iniciar").length;
-  const recAb=D.reclamos.filter(r=>!["Resuelto","Cerrado sin solución"].includes(r.estado)).length;
+  const recAb=D.reclamos.filter(r=>!CERRADOS_TODOS.includes(r.estado)).length;
   const recAfil=D.reclamos.filter(r=>r.hist.length&&r.hist.at(-1).afil).length;
   const tabs=[["tablero","Tablero",""],["pedidos","Pedidos por mail",sinResp?`<span class="count hot">${sinResp}</span>`:""],
     ["reclamos","Reclamos de afiliados",`<span class="count${recAfil?" hot":""}">${recAb}</span>`],["pendientes","Pendientes",`<span class="count">${pend}</span>`],
@@ -646,7 +647,7 @@ function tarjetaReclamo(r){
   </article>`;
 }
 function vReclamos(){
-  const f=state.fr,abiertos=r=>!["Resuelto","Cerrado sin solución"].includes(r.estado);
+  const f=state.fr,abiertos=r=>!CERRADOS_TODOS.includes(r.estado);
   const rs=D.reclamos.filter(r=>(f.estado==="todos"||(f.estado==="abiertos"?abiertos(r):!abiertos(r)))&&(!state.ftemaR||r.tema===state.ftemaR))
     .sort((a,b)=>((b.hist.at(-1)||{}).afil?1:0)-((a.hist.at(-1)||{}).afil?1:0)||rangoPrio(a)-rangoPrio(b));
   let cuerpo;
@@ -831,7 +832,7 @@ function vAdmin(){
       <div class="tbl"><table><thead><tr><th>Afiliado/a</th><th>Correo</th><th>Reclamo</th></tr></thead><tbody>${recAcceso.map(r=>`<tr><td>${esc(r.nombre)}</td><td class="gde">${esc(r.mail)}</td><td><button class="btn sm" data-open="${esc(r.id)}">${esc(r.titulo)}</button></td></tr>`).join("")||'<tr><td colspan="3">Ninguno todavía.</td></tr>'}</tbody></table></div></div>
     <div class="box"><h2>Temas de reclamo</h2><p>Sirven para agrupar los reclamos y los pedidos por mail (la IA elige uno de esta lista). Uno por renglón.</p>
       <form id="fTemas" style="display:grid;gap:8px"><textarea id="tLista" rows="8" style="border:1px solid var(--line);border-radius:6px;padding:8px">${esc(temas().join(String.fromCharCode(10)))}</textarea><div><button class="btn primary">Guardar temas</button></div></form></div>
-    <div class="box"><h2>Estados de los trámites</h2><p>Los estados fijos son: ${esc(ESTADOS_BASE.join(" · "))}. Acá podés sumar otros y elegir en qué columna del tablero aparecen. Los que van en "En curso", "Esperando respuesta" o "Judicializado" cuentan para el aviso de ${D.diasAlerta} días hábiles sin movimiento.</p>
+    <div class="box"><h2>Estados de los trámites</h2><p>Los estados fijos son: ${esc(ESTADOS_BASE.join(" · "))}. Acá podés sumar otros: aparecen en los trámites y también en los reclamos de afiliados. La columna indica dónde se ven en el tablero (si es "Cerrados", el reclamo cuenta como cerrado). Los que van en "En curso", "Esperando respuesta" o "Judicializado" cuentan para el aviso de ${D.diasAlerta} días hábiles sin movimiento.</p>
       <ul class="plain">${estadosExtra().map((e,i)=>`<li style="flex-wrap:wrap"><span><b>${esc(e.nombre)}</b></span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><small>Columna</small><select data-estcol="${i}" aria-label="Columna del tablero">${opts(COLS_ESTADO,e.col)}</select><button class="btn sm" data-estquitar="${i}">Quitar</button></span></li>`).join("")||'<li><span>Todavía no agregaste ninguno.</span></li>'}</ul>
       <form id="fEstado" class="row" style="margin-top:10px"><input id="eNom" required placeholder="Ej.: Esperando respuesta de la institución" style="border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:var(--surface)"><select id="eCol" aria-label="Columna del tablero" style="flex:0 0 auto">${opts(COLS_ESTADO,"Esperando respuesta")}</select><button class="btn primary" style="flex:0 0 auto">+ Agregar estado</button></form></div>
     <div class="box"><h2>Instituciones</h2><p>Cada institución es una pestaña de la planilla con la misma estructura.</p>
