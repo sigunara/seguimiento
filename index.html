@@ -245,15 +245,28 @@ body.ocupado::after{content:"";position:fixed;top:0;left:0;height:4px;width:100%
 <script>
 /* SIGUNARA · Seguimiento de trámites — pantalla (corre en el navegador, habla con api() del servidor) */
 const ESPERA = "Presentado, esperando respuesta oficial";
-const ESTADOS = ["Sin iniciar","En curso",ESPERA,"Judicializado","Finalizado","Respuesta negativa","Cancelado por nosotros"];
-const ACTIVOS = ["En curso",ESPERA,"Judicializado"];
-const CERRADOS = ["Finalizado","Respuesta negativa","Cancelado por nosotros"];
+const ESTADOS_BASE = ["Sin iniciar","En curso",ESPERA,"Judicializado","Finalizado","Respuesta negativa","Cancelado por nosotros"];
+const CERRADOS_BASE = ["Finalizado","Respuesta negativa","Cancelado por nosotros"];
+const COLS_ESTADO = ["Sin iniciar","En curso","Esperando respuesta","Judicializado","Cerrados"]; // columnas del tablero
+const COL_BASE = {"Sin iniciar":"Sin iniciar","En curso":"En curso",[ESPERA]:"Esperando respuesta","Judicializado":"Judicializado"};
+let ESTADOS = ESTADOS_BASE.slice(), ACTIVOS = ["En curso",ESPERA,"Judicializado"], CERRADOS = CERRADOS_BASE.slice();
+const estadosExtra = ()=>(D&&D.estadosExtra)||[];
+const esExtra = s=>estadosExtra().some(e=>e.nombre===s);
+function colDe(s){if(!s)return "En curso";const x=estadosExtra().find(e=>e.nombre===s);if(x)return x.col;return COL_BASE[s]||(CERRADOS.includes(s)?"Cerrados":"En curso")}
+/* Suma los estados agregados en Administración a las listas (los abiertos antes de "Judicializado", los cerrados al final). */
+function aplicarEstados(){
+  const ex=estadosExtra(),ab=ex.filter(e=>e.col!=="Cerrados").map(e=>e.nombre),ce=ex.filter(e=>e.col==="Cerrados").map(e=>e.nombre);
+  ESTADOS=["Sin iniciar","En curso",ESPERA,...ab,"Judicializado","Finalizado","Respuesta negativa","Cancelado por nosotros",...ce];
+  CERRADOS=[...CERRADOS_BASE,...ce];
+  ACTIVOS=["En curso",ESPERA,"Judicializado",...ex.filter(e=>["En curso","Esperando respuesta","Judicializado"].includes(e.col)).map(e=>e.nombre)];
+  CERRADOS_TODOS=[...CERRADOS,"Resuelto","Cerrado sin solución"];
+}
 const COLS = [
-  {t:"Sin iniciar", m:s=>s==="Sin iniciar"},
-  {t:"En curso", m:s=>s==="En curso"||!s},
-  {t:"Esperando respuesta oficial", m:s=>s===ESPERA},
-  {t:"Judicializado", m:s=>s==="Judicializado"},
-  {t:"Cerrados", m:s=>CERRADOS.includes(s)}
+  {t:"Sin iniciar", m:s=>colDe(s)==="Sin iniciar"},
+  {t:"En curso", m:s=>colDe(s)==="En curso"},
+  {t:"Esperando respuesta oficial", m:s=>colDe(s)==="Esperando respuesta"},
+  {t:"Judicializado", m:s=>colDe(s)==="Judicializado"},
+  {t:"Cerrados", m:s=>colDe(s)==="Cerrados"}
 ];
 const PRIOS = ["Alta","Media","Baja"];
 const ESTADOS_R = ["Nuevo","En análisis","En gestión","Derivado a abogados","Resuelto","Cerrado sin solución"];
@@ -337,6 +350,7 @@ async function accion(action,data,msg){
 
 /* Une documentos y novedades a cada caso. */
 function hidratar(){
+  aplicarEstados();
   const porCaso={};
   (D.docs||[]).forEach(d=>{d.hijos=[];(porCaso[d.caso]=porCaso[d.caso]||{docs:[],hist:[]}).docs.push(d)});
   (D.novs||[]).forEach(n=>{(porCaso[n.caso]=porCaso[n.caso]||{docs:[],hist:[]}).hist.push(n)});
@@ -472,7 +486,7 @@ function vTablero(){
 function card(t){
   const dh=habiles(ultimo(t)),closed=!ACTIVOS.includes(t.estado);
   return `<button class="card p-${esc(t.prio||"none")}" data-open="${esc(t.id)}">
-    <span class="meta"><span class="chip inst">${esc(t.inst)}</span>${prioChip(t.prio)}${CERRADOS.includes(t.estado)?estadoChip(t.estado):""}${t.tipo!=="Expediente"?`<span class="chip st">${esc(t.tipo)}</span>`:""}${chipPresentado(t)}${t.revisar?'<span class="chip stale">Revisar</span>':""}</span>
+    <span class="meta"><span class="chip inst">${esc(t.inst)}</span>${prioChip(t.prio)}${CERRADOS.includes(t.estado)||esExtra(t.estado)?estadoChip(t.estado):""}${t.tipo!=="Expediente"?`<span class="chip st">${esc(t.tipo)}</span>`:""}${chipPresentado(t)}${t.revisar?'<span class="chip stale">Revisar</span>':""}</span>
     <span class="ref">${esc(t.ref)}</span>
     ${t.exp?`<span class="gde">${esc(t.exp)}</span>`:t.tipo==="Expediente"?`<span class="meta"><span class="chip noexp">Sin n.º de expediente</span></span>`:""}
     <span class="meta"><span>${esc(t.id)} · ${esc(listaResp(t.resp).join(", ")||"Sin responsable")}</span>${!closed?(stale(t)?`<span class="chip stale">${dh} días hábiles sin movimiento</span>`:`<span>· últ. mov. ${fmt(ultimo(t))}</span>`):""}${t.docs.length?`<span>· ${flat(t.docs).length} doc.</span>`:""}</span>
@@ -745,7 +759,7 @@ function vPendientes(){
 
 /* ---------- prioridad de los abogados ---------- */
 /* La Comisión Directiva ordena los casos abiertos que tienen algún abogado/a como responsable; los abogados ven su lista en ese orden. */
-const CERRADOS_TODOS=[...CERRADOS,"Resuelto","Cerrado sin solución"];
+let CERRADOS_TODOS=[...CERRADOS,"Resuelto","Cerrado sin solución"];
 function casosAbogados(){
   const abg=D.abogados||[], orden=state.orden||D.ordenAbogados||[];
   const pos=id=>{const i=orden.indexOf(id);return i<0?1e6:i};
@@ -817,6 +831,9 @@ function vAdmin(){
       <div class="tbl"><table><thead><tr><th>Afiliado/a</th><th>Correo</th><th>Reclamo</th></tr></thead><tbody>${recAcceso.map(r=>`<tr><td>${esc(r.nombre)}</td><td class="gde">${esc(r.mail)}</td><td><button class="btn sm" data-open="${esc(r.id)}">${esc(r.titulo)}</button></td></tr>`).join("")||'<tr><td colspan="3">Ninguno todavía.</td></tr>'}</tbody></table></div></div>
     <div class="box"><h2>Temas de reclamo</h2><p>Sirven para agrupar los reclamos y los pedidos por mail (la IA elige uno de esta lista). Uno por renglón.</p>
       <form id="fTemas" style="display:grid;gap:8px"><textarea id="tLista" rows="8" style="border:1px solid var(--line);border-radius:6px;padding:8px">${esc(temas().join(String.fromCharCode(10)))}</textarea><div><button class="btn primary">Guardar temas</button></div></form></div>
+    <div class="box"><h2>Estados de los trámites</h2><p>Los estados fijos son: ${esc(ESTADOS_BASE.join(" · "))}. Acá podés sumar otros y elegir en qué columna del tablero aparecen. Los que van en "En curso", "Esperando respuesta" o "Judicializado" cuentan para el aviso de ${D.diasAlerta} días hábiles sin movimiento.</p>
+      <ul class="plain">${estadosExtra().map((e,i)=>`<li style="flex-wrap:wrap"><span><b>${esc(e.nombre)}</b></span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><small>Columna</small><select data-estcol="${i}" aria-label="Columna del tablero">${opts(COLS_ESTADO,e.col)}</select><button class="btn sm" data-estquitar="${i}">Quitar</button></span></li>`).join("")||'<li><span>Todavía no agregaste ninguno.</span></li>'}</ul>
+      <form id="fEstado" class="row" style="margin-top:10px"><input id="eNom" required placeholder="Ej.: Esperando respuesta de la institución" style="border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:var(--surface)"><select id="eCol" aria-label="Columna del tablero" style="flex:0 0 auto">${opts(COLS_ESTADO,"Esperando respuesta")}</select><button class="btn primary" style="flex:0 0 auto">+ Agregar estado</button></form></div>
     <div class="box"><h2>Instituciones</h2><p>Cada institución es una pestaña de la planilla con la misma estructura.</p>
       <ul class="plain">${D.instituciones.map(i=>`<li><span>${esc(i)}</span><span class="count">${D.tramites.filter(t=>t.inst===i).length} trámites</span></li>`).join("")}</ul>
       <form id="fInstNew" class="row" style="margin-top:10px"><input id="iNom" required placeholder="Ej.: ARCA (ex AFIP)" style="border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:var(--surface)"><button class="btn primary" style="flex:0 0 auto">+ Nueva institución</button></form></div>
@@ -858,8 +875,11 @@ async function bajar(action,data){
 
 /* ---------- eventos ---------- */
 document.addEventListener("click",e=>{
-  const b=e.target.closest("[data-view],[data-open],[data-act],[data-dl],[data-dlall],[data-conv],[data-quitar],[data-torec],[data-login],[data-sol],[data-reset],[data-temporal],[data-ord],[data-borrarped],[data-copiar]"); if(!b||state.busy)return;
+  const b=e.target.closest("[data-view],[data-open],[data-act],[data-dl],[data-dlall],[data-conv],[data-quitar],[data-torec],[data-login],[data-sol],[data-reset],[data-temporal],[data-ord],[data-borrarped],[data-copiar],[data-estquitar]"); if(!b||state.busy)return;
   if(b.dataset.copiar){navigator.clipboard.writeText(b.dataset.copiar).then(()=>toast("Link copiado. Pegalo en WhatsApp o en un mail."),()=>prompt("Copiá el link:",b.dataset.copiar));return}
+  if(b.dataset.estquitar!==undefined){const ex=estadosExtra(),e0=ex[Number(b.dataset.estquitar)],usan=D.tramites.filter(t=>t.estado===e0.nombre).length;
+    if(!confirm(`¿Quitar el estado "${e0.nombre}"?`+(usan?` Hay ${usan} trámite(s) con ese estado: lo conservan, pero conviene cambiárselo.`:"")))return;
+    accion("guardarEstados",{estados:ex.filter((x,i)=>i!==Number(b.dataset.estquitar))},"Estado quitado.").catch(()=>{});return}
   if(b.dataset.borrarped){const p=D.pedidos.find(x=>x.id===b.dataset.borrarped);
     if(!confirm(`¿Borrar el pedido de ${p.nombre}?\n\nAsunto: ${p.asunto}\n\nSe borra de la plataforma junto con sus novedades y adjuntos (los adjuntos van a la papelera de Drive). El mail sigue en Gmail y no se vuelve a cargar. No se puede deshacer desde la plataforma.`))return;
     accion("borrarPedido",{id:p.id},"Pedido borrado.").catch(()=>{});return}
@@ -910,6 +930,7 @@ document.addEventListener("click",e=>{
 document.addEventListener("change",e=>{
   const el=e.target; if(state.busy)return;
   if(el.dataset.vercl!==undefined){document.querySelectorAll("#main input[type=password],#main input[data-clave]").forEach(i=>{i.type=el.checked?"text":"password";i.dataset.clave="1"});return}
+  if(el.dataset.estcol!==undefined){const ex=estadosExtra().map(x=>({...x}));ex[Number(el.dataset.estcol)].col=el.value;accion("guardarEstados",{estados:ex},"Columna cambiada.").catch(()=>{});return}
   if(el.id==="fInst"){state.f.inst=el.value;render()}
   if(el.id==="fPrio"){state.f.prio=el.value;render()}
   if(el.id==="fResp"){state.f.resp=el.value;render()}
@@ -976,6 +997,7 @@ Sin correo (no se mandó): ${x.sinMail.join(", ")}`:"")+(x.fallos.length?`
 
 No se pudo mandar a: ${x.fallos.join(", ")}`:""));
     }
+    if(f.id==="fEstado"){const n=$("#eNom").value.trim();if(!n)return;await accion("guardarEstados",{estados:[...estadosExtra(),{nombre:n,col:$("#eCol").value}]},"Estado agregado.");return}
     if(f.id==="fTemas"){await accion("guardarTemas",{temas:$("#tLista").value.split(/\r?\n/)},"Temas guardados.")}
   }catch(err){if(err&&err.message)toast(err.message,true)}
 });
